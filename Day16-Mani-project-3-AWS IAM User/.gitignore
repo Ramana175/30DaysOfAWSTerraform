@@ -1,0 +1,40 @@
+```gitignore
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+
+# Terraform Lock File
+.terraform.lock.hcl
+
+# Terraform Variables
+*.tfvars
+*.tfvars.json
+
+# Override Files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Sensitive Files
+*.pem
+*.key
+
+# Environment Files
+.env
+.env.*
+
+# IDE Files
+.vscode/
+.idea/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+```
