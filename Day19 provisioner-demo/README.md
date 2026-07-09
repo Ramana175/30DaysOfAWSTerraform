@@ -1,180 +1,551 @@
-Terraform Provisioners Demo
-📚 What Are Provisioners?
-Provisioners are Terraform's way to execute scripts or commands during resource creation or destruction. They enable you to perform actions that go beyond Terraform's declarative resource management.
+# Terraform Provisioners Demo 🚀
 
-Key Concepts
-Provisioners run during resource lifecycle events (creation or destruction)
-They are a "last resort" - Terraform recommends using native cloud-init, user_data, or configuration management tools when possible
-They execute only once during resource creation (not on updates)
-Failure handling: By default, if a provisioner fails, the resource is marked as "tainted" and will be recreated on next apply
-🔧 Types of Provisioners
-This demo covers the three most common provisioner types:
+> Learn how Terraform Provisioners work by creating an AWS EC2 instance and executing commands locally, remotely, and by transferring files. This project demonstrates **local-exec**, **remote-exec**, and **file provisioners**, along with their real-world use cases, limitations, and best practices.
 
-1. local-exec Provisioner
-Where it runs: On the machine executing Terraform (your laptop, CI/CD server)
-Connection required: No
-Use cases:
-Trigger webhooks or API calls
-Update local inventory files
-Run local scripts for orchestration
-Send notifications (Slack, email)
-Register resources in external systems
-Example:
+---
 
+## 📌 Project Overview
+
+Infrastructure as Code (IaC) is designed to provision infrastructure declaratively. However, there are situations where we need to execute commands after a resource is created.
+
+Terraform provides **Provisioners** for these scenarios.
+
+In this project, I created an EC2 instance using Terraform and demonstrated the three most commonly used provisioners:
+
+* **local-exec**
+* **remote-exec**
+* **file**
+
+Each provisioner solves a different problem, and understanding when (and when not) to use them is an important DevOps skill.
+
+---
+
+# 🏗️ Architecture
+
+```
+                Terraform
+                     │
+                     │
+              terraform apply
+                     │
+                     ▼
+          AWS EC2 Instance Created
+                     │
+     ┌───────────────┼────────────────┐
+     │               │                │
+     ▼               ▼                ▼
+local-exec      remote-exec      file provisioner
+(Local PC)       (EC2 SSH)      (Copy Files)
+```
+
+---
+
+# 📂 Project Structure
+
+```
+Terraform-Provisioners-Demo
+│
+├── backend.tf
+├── provider.tf
+├── variables.tf
+├── main.tf
+├── outputs.tf
+│
+├── scripts
+│     └── welcome.sh
+│
+├── demo.sh
+│
+└── README.md
+```
+
+---
+
+# 🚀 What are Terraform Provisioners?
+
+Provisioners are special blocks in Terraform that execute scripts or commands during the lifecycle of a resource.
+
+Unlike normal Terraform resources, provisioners perform procedural tasks.
+
+For example:
+
+* Install software
+* Configure servers
+* Copy files
+* Execute shell scripts
+* Register servers
+* Trigger external APIs
+
+Provisioners execute **only during creation or destruction** of a resource.
+
+Terraform itself recommends using them **only when there is no better alternative**.
+
+---
+
+# Why Provisioners Exist
+
+Terraform creates infrastructure.
+
+Sometimes infrastructure alone isn't enough.
+
+Imagine Terraform creates an EC2 instance.
+
+After the instance starts, you may want to:
+
+* Install Nginx
+* Install Docker
+* Copy configuration files
+* Execute scripts
+* Register the server with another system
+
+Provisioners help automate these tasks.
+
+---
+
+# Provisioners Demonstrated
+
+## 1️⃣ local-exec Provisioner
+
+### Where does it run?
+
+On the machine running Terraform.
+
+This could be:
+
+* Your laptop
+* GitHub Actions Runner
+* Jenkins
+* GitLab Runner
+
+### Example
+
+```hcl
 provisioner "local-exec" {
-  command = "echo ${self.public_ip} >> inventory.txt"
+  command = "echo ${self.public_ip}"
 }
-2. remote-exec Provisioner
-Where it runs: On the remote resource via SSH/WinRM
-Connection required: Yes (SSH for Linux, WinRM for Windows)
-Use cases:
-Install packages (nginx, docker, etc.)
-Run initialization commands
-Configure system settings
-Start services or daemons
-Quick bootstrap tasks
+```
+
+### Common Use Cases
+
+* Update inventory files
+* Trigger API calls
+* Execute local scripts
+* Send Slack notifications
+* Call Jenkins jobs
+
+### Advantages
+
+* No SSH required
+* Easy to use
+* Runs instantly
+
+### Limitations
+
+* Cannot configure remote servers
+* Only runs where Terraform executes
+
+---
+
+# 2️⃣ remote-exec Provisioner
+
+### Where does it run?
+
+Inside the EC2 instance over SSH.
+
+Terraform connects to the server using:
+
+* SSH
+* Private Key
+* Username
+
 Example:
 
+```hcl
 provisioner "remote-exec" {
   inline = [
-    "sudo apt-get update",
-    "sudo apt-get install -y nginx",
-    "sudo systemctl start nginx"
+    "sudo apt update",
+    "sudo apt install nginx -y"
   ]
 }
-3. file Provisioner
-Where it runs: Copies files from local to remote
-Connection required: Yes (SSH for Linux, WinRM for Windows)
-Use cases:
-Copy configuration files
-Deploy scripts for execution
-Transfer SSL certificates
-Upload application binaries
-Example:
+```
 
-provisioner "file" {
-  source      = "scripts/setup.sh"
-  destination = "/tmp/setup.sh"
-}
+### Connection Block
 
-provisioner "remote-exec" {
-  inline = [
-    "chmod +x /tmp/setup.sh",
-    "/tmp/setup.sh"
-  ]
-}
-🎯 Provisioner Best Practices
-✅ DO:
-Use provisioners as a last resort
-Prefer cloud-init, user_data, or AMI baking (Packer)
-Keep provisioner scripts idempotent
-Handle errors gracefully with on_failure parameter
-Use connection timeouts to avoid hanging
-Test thoroughly in non-production environments
-❌ DON'T:
-Use provisioners when native Terraform resources exist
-Rely on provisioners for critical configuration
-Forget that provisioners only run on creation
-Store sensitive data in provisioner commands
-Use complex logic - move to proper config management tools
-🔄 Connection Block
-For remote-exec and file provisioners, you need a connection block:
-
+```hcl
 connection {
-  type        = "ssh"              # or "winrm" for Windows
-  user        = "ubuntu"           # SSH user
-  private_key = file("~/.ssh/id_rsa")  # SSH private key
-  host        = self.public_ip     # Target host
-  timeout     = "5m"               # Connection timeout
+  type        = "ssh"
+  user        = "ubuntu"
+  private_key = file(var.private_key_path)
+  host        = self.public_ip
 }
-📖 Demo Overview
-This small demo shows three provisioner techniques and how to enable them one at a time for teaching:
+```
 
-local-exec: runs on the machine where Terraform runs
-remote-exec: runs over SSH on the target instance
-file + remote-exec: copies a script and executes it remotely
-How to use
+### Common Use Cases
 
-Prerequisites
+* Install packages
+* Start services
+* Configure Linux
+* Create users
+* Execute shell commands
 
-AWS credentials available (environment variables, shared credentials, or other supported mechanism)
-An existing EC2 key pair in the chosen region (set var.key_name)
-The private key file available locally (set var.private_key_path to the path)
-Quick demo steps (recommended flow)
+### Advantages
 
-Open main.tf and leave all provisioner blocks commented by default.
-Uncomment the provisioner block you want to test (only one at a time).
-Initialize: terraform init
-Create resources: terraform apply -var='key_name=YOUR_KEY' -var='private_key_path=/path/to/key.pem' -auto-approve
-Re-run a provisioner after changes Provisioners run when a resource is created (and some run on destroy). To re-run a provisioner on the same resource:
+* Easy server bootstrap
+* Simple automation
 
-terraform taint aws_instance.demo # marks resource for recreation
-terraform apply -var='key_name=YOUR_KEY' -var='private_key_path=/path/to/key.pem' -auto-approve
-Helpful tips
+### Limitations
 
-If your instance is in a private subnet or not reachable from your machine, the remote-exec and file provisioners will fail.
-Use local-exec for local integration tasks (e.g., copying artifacts to a registry), and remote-based provisioners for instance-level bootstrapping.
-When teaching: uncomment one block, run apply, show results, then comment it back (or taint to re-run).
-Files
+Requires:
 
-main.tf - instance, security group and commented provisioner blocks
-provider.tf - provider and region variable
-variables.tf - required variables (key name, private key path)
-backend.tf - example S3 backend (commented)
-outputs.tf - public IP and instance ID
-scripts/welcome.sh - sample script used by the file provisioner
-demo.sh - helper script to initialize & apply (simple)
-🚨 Important Notes
-Provisioner Execution Timing
-Provisioners only run during resource CREATION (and optionally destruction). They do NOT run:
+* SSH
+* Security Group
+* Public IP (or VPN/Bastion)
+* Working private key
 
-On resource updates
-When you change provisioner code
-During terraform plan
-On every terraform apply
-To re-run a provisioner, you must recreate the resource:
+---
 
-# Option 1: Taint the resource
-terraform taint aws_instance.demo
+# 3️⃣ File Provisioner
 
-# Option 2: Use replace flag (Terraform 0.15.2+)
-terraform apply -replace=aws_instance.demo
-Failure Behavior
-By default, if a provisioner fails:
+The File Provisioner copies files from your local machine to the remote EC2 instance.
 
-The resource creation is considered failed
-The resource is marked as tainted
-Next apply will destroy and recreate it
-You can change this behavior:
+Example:
 
+```hcl
+provisioner "file" {
+  source      = "scripts/welcome.sh"
+  destination = "/tmp/welcome.sh"
+}
+```
+
+Usually followed by:
+
+```hcl
 provisioner "remote-exec" {
-  inline = ["some-command"]
-  
-  on_failure = continue  # Options: fail (default) | continue
+  inline = [
+    "chmod +x /tmp/welcome.sh",
+    "/tmp/welcome.sh"
+  ]
 }
-Destroy-Time Provisioners
-Run actions when a resource is destroyed:
+```
 
+### Common Use Cases
+
+* Upload scripts
+* Copy SSL certificates
+* Transfer application files
+* Deploy configuration files
+
+---
+
+# Provisioner Execution Flow
+
+```
+terraform apply
+
+↓
+
+EC2 Created
+
+↓
+
+local-exec (Local Machine)
+
+↓
+
+SSH Connection
+
+↓
+
+remote-exec Commands
+
+↓
+
+Copy Files
+
+↓
+
+Execute Files
+```
+
+---
+
+# Demo Walkthrough
+
+### Step 1
+
+Initialize Terraform
+
+```bash
+terraform init
+```
+
+---
+
+### Step 2
+
+Review the execution plan
+
+```bash
+terraform plan
+```
+
+---
+
+### Step 3
+
+Deploy the infrastructure
+
+```bash
+terraform apply \
+-var="key_name=my-key" \
+-var="private_key_path=./my-key.pem"
+```
+
+Terraform will:
+
+* Create Security Group
+* Launch EC2 Instance
+* Execute Provisioner
+
+---
+
+### Step 4
+
+Verify
+
+SSH into the instance
+
+```bash
+ssh -i my-key.pem ubuntu@<public-ip>
+```
+
+Verify:
+
+```
+/tmp/remote_exec.txt
+```
+
+or
+
+```
+/tmp/welcome.sh
+```
+
+depending on the provisioner used.
+
+---
+
+# Re-running a Provisioner
+
+Provisioners **do not execute on every `terraform apply`**.
+
+They only run when the resource is created.
+
+To execute them again:
+
+```bash
+terraform taint aws_instance.demo
+```
+
+or
+
+```bash
+terraform apply \
+-replace=aws_instance.demo
+```
+
+Terraform recreates the instance and executes the provisioners again.
+
+---
+
+# Destroy-Time Provisioners
+
+Provisioners can also run during resource deletion.
+
+Example:
+
+```hcl
 provisioner "local-exec" {
   when    = destroy
-  command = "echo 'Cleaning up ${self.id}'"
+  command = "echo Instance Deleted"
 }
-🆚 Alternatives to Provisioners
-Before using provisioners, consider these alternatives:
+```
 
-Alternative	Use Case	Pros
-user_data / cloud-init	EC2 instance initialization	Native, runs on every boot, no SSH needed
-Packer	Pre-bake AMIs	Faster deployments, immutable infrastructure
-Ansible/Chef/Puppet	Configuration management	Better for complex setups, mature tooling
-AWS Systems Manager	Post-deployment config	No SSH, works in private subnets
-Container images	Application deployment	Portable, version controlled
-📚 Additional Resources
-Terraform Provisioners Documentation
-Why Provisioners Are Last Resort
-AWS EC2 User Data
-Packer by HashiCorp
-🔒 Safety Note
-Never share your private key or commit it to version control
-Use .gitignore to exclude *.pem files
-Clean up resources after demo with terraform destroy
-Review security group rules (SSH should be restricted to your IP)
+Useful for:
+
+* Notifications
+* Cleanup
+* Deregistration
+* Removing DNS records
+
+---
+
+# Best Practices
+
+✅ Prefer `user_data` or `cloud-init` for EC2 initialization.
+
+✅ Keep provisioners simple and idempotent.
+
+✅ Restrict SSH access to trusted IPs.
+
+✅ Use `on_failure = continue` only when appropriate.
+
+✅ Never commit private keys (`*.pem`) to version control.
+
+---
+
+# When Should You Avoid Provisioners?
+
+Provisioners are powerful but should be the **last option**, not the first.
+
+Prefer these alternatives:
+
+| Requirement                | Better Option          |
+| -------------------------- | ---------------------- |
+| Install packages on EC2    | user_data / cloud-init |
+| Create AMIs                | Packer                 |
+| Configure multiple servers | Ansible                |
+| Post-deployment management | AWS Systems Manager    |
+| Application deployment     | Docker / Kubernetes    |
+
+---
+
+# Key Learnings
+
+* Learned how Terraform executes provisioners during resource creation.
+* Understood the difference between local-exec, remote-exec, and file provisioners.
+* Configured SSH connections for remote execution.
+* Learned how to transfer files and execute them on EC2.
+* Explored provisioner limitations and why HashiCorp recommends alternatives for production.
+
+---
+
+# Common Errors
+
+### SSH Timeout
+
+Usually caused by:
+
+* Wrong Security Group
+* Wrong Username
+* Private Subnet
+* Incorrect Key Pair
+
+---
+
+### Invalid Private Key
+
+Ensure the correct PEM file is used:
+
+```bash
+private_key = file(var.private_key_path)
+```
+
+---
+
+### Permission Denied
+
+Fix permissions:
+
+```bash
+chmod 400 my-key.pem
+```
+
+---
+
+# Interview Questions & Answers
+
+### Q1. What is a Terraform Provisioner?
+
+A Provisioner is used to execute scripts or commands on the local machine or remote resource after infrastructure creation or during destruction.
+
+---
+
+### Q2. What are the different types of Provisioners?
+
+* local-exec
+* remote-exec
+* file
+
+---
+
+### Q3. Why are Provisioners considered a last resort?
+
+Terraform is declarative, while provisioners are imperative. Native cloud features like `user_data`, `cloud-init`, or configuration management tools are more reliable, repeatable, and easier to maintain.
+
+---
+
+### Q4. When do Provisioners execute?
+
+Only during:
+
+* Resource creation
+* Resource destruction (if `when = destroy` is used)
+
+They do **not** run on every `terraform apply`.
+
+---
+
+### Q5. How can you re-run a Provisioner?
+
+Recreate the resource:
+
+```bash
+terraform taint aws_instance.demo
+```
+
+or
+
+```bash
+terraform apply -replace=aws_instance.demo
+```
+
+---
+
+### Q6. What is the difference between local-exec and remote-exec?
+
+| local-exec             | remote-exec                   |
+| ---------------------- | ----------------------------- |
+| Runs on local machine  | Runs on remote EC2            |
+| No SSH required        | SSH required                  |
+| Good for orchestration | Good for server configuration |
+
+---
+
+### Q7. Can Provisioners copy files?
+
+Yes. The `file` provisioner copies files from the local machine to the remote server.
+
+---
+
+### Q8. What is the recommended alternative to Provisioners?
+
+* EC2 `user_data`
+* `cloud-init`
+* Packer
+* Ansible
+* AWS Systems Manager
+
+---
+
+# How to Explain This Project in an Interview
+
+> "In this project, I explored Terraform Provisioners by provisioning an AWS EC2 instance and demonstrating all three major provisioner types: local-exec, remote-exec, and file. I learned how local-exec runs commands on the machine executing Terraform, while remote-exec connects to the EC2 instance over SSH to perform configuration tasks. I also used the file provisioner to transfer scripts to the server and execute them remotely. Through this project, I understood that provisioners are useful for bootstrapping but should be used sparingly because Terraform recommends native solutions like user_data, cloud-init, or configuration management tools for production environments."
+
+---
+
+# Tech Stack
+
+* Terraform
+* AWS EC2
+* AWS Security Groups
+* SSH
+* Ubuntu 22.04
+* Bash
+* Infrastructure as Code (IaC)
+
+---
+
+# Conclusion
+
+This project provided hands-on experience with Terraform Provisioners and clarified their role in Infrastructure as Code workflows. While they are useful for demonstrations, bootstrapping, and simple automation, production environments should rely on cloud-native initialization mechanisms or dedicated configuration management tools. Understanding when to use provisioners—and when to avoid them—is an important skill for any DevOps Engineer.
